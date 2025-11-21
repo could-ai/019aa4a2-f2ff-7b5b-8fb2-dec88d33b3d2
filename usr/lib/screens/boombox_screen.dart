@@ -11,6 +11,7 @@ class BoomboxScreen extends StatefulWidget {
 }
 
 class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateMixin {
+  bool _isPoweredOn = true;
   bool _isPlaying = false;
   double _volume = 0.5;
   int _currentTrackIndex = 0;
@@ -44,7 +45,7 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
     _pulseController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         _pulseController.reverse();
-      } else if (status == AnimationStatus.dismissed && _isPlaying) {
+      } else if (status == AnimationStatus.dismissed && _isPlaying && _isPoweredOn) {
         _pulseController.forward();
       }
     });
@@ -57,7 +58,22 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
     super.dispose();
   }
 
+  void _togglePower() {
+    setState(() {
+      _isPoweredOn = !_isPoweredOn;
+      if (!_isPoweredOn) {
+        _isPlaying = false;
+        _pulseController.stop();
+        _pulseController.reset();
+        _timer?.cancel();
+      }
+    });
+    HapticFeedback.heavyImpact();
+  }
+
   void _togglePlay() {
+    if (!_isPoweredOn) return;
+    
     setState(() {
       _isPlaying = !_isPlaying;
       if (_isPlaying) {
@@ -87,6 +103,7 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
   }
 
   void _nextTrack() {
+    if (!_isPoweredOn) return;
     setState(() {
       _currentTrackIndex = (_currentTrackIndex + 1) % _tracks.length;
       _currentPosition = Duration.zero;
@@ -95,6 +112,7 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
   }
 
   void _prevTrack() {
+    if (!_isPoweredOn) return;
     setState(() {
       _currentTrackIndex = (_currentTrackIndex - 1 + _tracks.length) % _tracks.length;
       _currentPosition = Duration.zero;
@@ -102,10 +120,20 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
     HapticFeedback.lightImpact();
   }
 
-  void _changeVolume(double value) {
+  void _volumeUp() {
+    if (!_isPoweredOn) return;
     setState(() {
-      _volume = value;
+      _volume = (_volume + 0.1).clamp(0.0, 1.0);
     });
+    HapticFeedback.selectionClick();
+  }
+
+  void _volumeDown() {
+    if (!_isPoweredOn) return;
+    setState(() {
+      _volume = (_volume - 0.1).clamp(0.0, 1.0);
+    });
+    HapticFeedback.selectionClick();
   }
 
   String _formatDuration(Duration duration) {
@@ -139,7 +167,7 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
                 child: Text(
                   'SONY',
                   style: TextStyle(
-                    fontFamily: 'Roboto', // Fallback to default sans if not available
+                    fontFamily: 'Roboto',
                     fontSize: 28,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 4.0,
@@ -163,90 +191,97 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     // LCD Display
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF222222),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF444444), width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
-                          )
-                        ],
-                      ),
+                    AnimatedOpacity(
+                      duration: const Duration(milliseconds: 500),
+                      opacity: _isPoweredOn ? 1.0 : 0.3,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2B3A28), // Retro LCD Greenish/Dark
-                          borderRadius: BorderRadius.circular(4),
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(0xFF2B3A28), Color(0xFF1F2B1D)],
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _isPlaying ? 'PLAY' : 'PAUSE',
-                                  style: const TextStyle(
-                                    color: Color(0xFF8FBC8F),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.battery_full,
-                                  color: const Color(0xFF8FBC8F).withOpacity(0.7),
-                                  size: 16,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              currentTrack['title']!,
-                              style: const TextStyle(
-                                color: Color(0xFF8FBC8F), // LCD Green
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'Courier',
-                                letterSpacing: 1.1,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            Text(
-                              currentTrack['artist']!,
-                              style: TextStyle(
-                                color: const Color(0xFF8FBC8F).withOpacity(0.8),
-                                fontSize: 14,
-                                fontFamily: 'Courier',
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  _formatDuration(_currentPosition),
-                                  style: const TextStyle(color: Color(0xFF8FBC8F)),
-                                ),
-                                Text(
-                                  currentTrack['duration']!,
-                                  style: const TextStyle(color: Color(0xFF8FBC8F)),
-                                ),
-                              ],
-                            ),
+                          color: const Color(0xFF222222),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFF444444), width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.5),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            )
                           ],
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: _isPoweredOn ? const Color(0xFF2B3A28) : const Color(0xFF151A14),
+                            borderRadius: BorderRadius.circular(4),
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: _isPoweredOn 
+                                ? [const Color(0xFF2B3A28), const Color(0xFF1F2B1D)]
+                                : [const Color(0xFF151A14), const Color(0xFF0F120E)],
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    _isPoweredOn ? (_isPlaying ? 'PLAY' : 'PAUSE') : '',
+                                    style: const TextStyle(
+                                      color: Color(0xFF8FBC8F),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (_isPoweredOn)
+                                    Icon(
+                                      Icons.battery_full,
+                                      color: const Color(0xFF8FBC8F).withOpacity(0.7),
+                                      size: 16,
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _isPoweredOn ? currentTrack['title']! : '',
+                                style: const TextStyle(
+                                  color: Color(0xFF8FBC8F),
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Courier',
+                                  letterSpacing: 1.1,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                _isPoweredOn ? currentTrack['artist']! : '',
+                                style: TextStyle(
+                                  color: const Color(0xFF8FBC8F).withOpacity(0.8),
+                                  fontSize: 14,
+                                  fontFamily: 'Courier',
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    _isPoweredOn ? _formatDuration(_currentPosition) : '--:--',
+                                    style: const TextStyle(color: Color(0xFF8FBC8F)),
+                                  ),
+                                  Text(
+                                    _isPoweredOn ? currentTrack['duration']! : '--:--',
+                                    style: const TextStyle(color: Color(0xFF8FBC8F)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -282,6 +317,15 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
                       ),
                       child: Column(
                         children: [
+                          // Power Button (New)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 16.0),
+                              child: _buildPowerButton(),
+                            ),
+                          ),
+                          
                           // Playback Controls
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -295,27 +339,45 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
                               _buildControlButton(Icons.skip_next, _nextTrack),
                             ],
                           ),
-                          const SizedBox(height: 20),
-                          // Volume Slider
-                          Row(
-                            children: [
-                              const Icon(Icons.volume_mute, color: Colors.grey, size: 20),
-                              Expanded(
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    activeTrackColor: const Color(0xFFE53935),
-                                    inactiveTrackColor: const Color(0xFF424242),
-                                    thumbColor: Colors.white,
-                                    overlayColor: const Color(0xFFE53935).withOpacity(0.2),
-                                  ),
-                                  child: Slider(
-                                    value: _volume,
-                                    onChanged: _changeVolume,
-                                  ),
+                          const SizedBox(height: 24),
+                          
+                          // Volume Controls (Replaced Slider with Buttons)
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1A1A1A),
+                              borderRadius: BorderRadius.circular(30),
+                              border: Border.all(color: const Color(0xFF333333)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove, color: Colors.white),
+                                  onPressed: _volumeDown,
+                                  tooltip: 'Volume -',
                                 ),
-                              ),
-                              const Icon(Icons.volume_up, color: Colors.grey, size: 20),
-                            ],
+                                Row(
+                                  children: [
+                                    const Icon(Icons.volume_up, color: Colors.grey, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'VOL ${( _volume * 100).toInt()}%',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontFamily: 'Courier',
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add, color: Colors.white),
+                                  onPressed: _volumeUp,
+                                  tooltip: 'Volume +',
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -347,12 +409,56 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
     );
   }
 
+  Widget _buildPowerButton() {
+    return GestureDetector(
+      onTap: _togglePower,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: _isPoweredOn ? const Color(0xFFE53935).withOpacity(0.2) : const Color(0xFF222222),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: _isPoweredOn ? const Color(0xFFE53935) : const Color(0xFF555555),
+            width: 1.5,
+          ),
+          boxShadow: _isPoweredOn ? [
+            BoxShadow(
+              color: const Color(0xFFE53935).withOpacity(0.4),
+              blurRadius: 6,
+              spreadRadius: 1,
+            )
+          ] : [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.power_settings_new,
+              color: _isPoweredOn ? const Color(0xFFE53935) : Colors.grey,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'POWER',
+              style: TextStyle(
+                color: _isPoweredOn ? const Color(0xFFE53935) : Colors.grey,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSpeaker() {
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
         return Transform.scale(
-          scale: _isPlaying ? _pulseAnimation.value : 1.0,
+          scale: (_isPlaying && _isPoweredOn) ? _pulseAnimation.value : 1.0,
           child: Container(
             width: 100,
             height: 100,
@@ -393,7 +499,6 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
   }
 
   Widget _buildCassetteDeck() {
-    // A small visual representation of a cassette deck or equalizer
     return Container(
       width: 80,
       height: 60,
@@ -411,9 +516,9 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: 8,
-                height: _isPlaying ? 20.0 + Random().nextInt(30) : 5.0,
+                height: (_isPlaying && _isPoweredOn) ? 20.0 + Random().nextInt(30) : 5.0,
                 decoration: BoxDecoration(
-                  color: _isPlaying ? Colors.redAccent : Colors.grey.shade800,
+                  color: (_isPlaying && _isPoweredOn) ? Colors.redAccent : Colors.grey.shade800,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -455,7 +560,7 @@ class _BoomboxScreenState extends State<BoomboxScreen> with TickerProviderStateM
         ),
         child: Icon(
           icon,
-          color: Colors.white,
+          color: _isPoweredOn ? Colors.white : Colors.white.withOpacity(0.3),
           size: isPrimary ? 32 : 24,
         ),
       ),
